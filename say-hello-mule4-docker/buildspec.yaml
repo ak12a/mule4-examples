@@ -1,0 +1,47 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      java: corretto8
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      - echo $AWS_DEFAULT_REGION
+      - $(aws ecr get-login --region $AWS_DEFAULT_REGION --no-include-email)
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPOSITORY
+      - echo $REPOSITORY_URI
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - echo $COMMIT_HASH
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+      - java -version 
+      - mvn -version 
+  build:
+    commands:
+      - echo Build started on date
+      - echo Start Maven install
+      - mvn install
+      - echo Start Maven build
+      - mvn clean package
+      - echo Building the Docker image...
+      - echo $REPOSITORY_URI
+      - ls -ltr 
+     # - docker build -t 858855954940.dkr.ecr.us-east-1.amazonaws.com/vac01cdrecr/800:latest .
+      - docker build -t $REPOSITORY_URI:latest .
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+     # - docker tag 858855954940.dkr.ecr.us-east-1.amazonaws.com/vac01cdrecr/800:latest 858855954940.dkr.ecr.us-east-1.amazonaws.com/vac01cdrecr/800:$IMAGE_TAG   
+  post_build:
+    commands:
+      - echo Build completed on date
+      - echo Pushing the Docker images...
+     # - docker push 858855954940.dkr.ecr.us-east-1.amazonaws.com/vac01cdrecr/800:latest
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo Writing image definitions file...
+      - printf '[{"name":"%s","imageUri":"%s"}]' $SERVICE_NAME $REPOSITORY_URI:$IMAGE_TAG > imageDetail.json 
+cache:
+  paths:
+    - '/root/.m2/*/'
+artifacts:
+    files: imageDetail.json
