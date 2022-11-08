@@ -23,6 +23,8 @@ phases:
     commands:
       - echo Build started on date
       - echo Start Maven install
+      - echo $PWD
+      - ls -l 
       - mvn install
       - echo Start Maven build
       - mvn clean package
