@@ -6,6 +6,13 @@ phases:
       java: corretto8
   pre_build:
     commands:
+      - echo " Installing Trivy to scan the docker image vulnerability" 
+      - apt-get install wget apt-transport-https gnupg
+      - wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | apt-key add -
+      - echo deb https://aquasecurity.github.io/trivy-repo/deb bionic main | tee -a /etc/apt/sources.list.d/trivy.list
+      - apt-get update
+      - apt-get install -y trivy
+    
       - echo Logging in to Amazon ECR...
       - aws --version
       - echo $AWS_DEFAULT_REGION
@@ -21,7 +28,7 @@ phases:
       - ls -l 
   build:
     commands:
-      - echo Build started on date
+      - echo Build started on $(date)
       - cd $PROJECT_DIR
       - echo Start Maven install
       - echo $PWD
@@ -32,15 +39,14 @@ phases:
       - echo Building the Docker image...
       - echo $REPOSITORY_URI
       - ls -ltr 
-     # - docker build -t 858855954940.dkr.ecr.us-east-1.amazonaws.com/vac01cdrecr/800:latest .
       - docker build -t $REPOSITORY_URI:latest .
       - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
-     # - docker tag 858855954940.dkr.ecr.us-east-1.amazonaws.com/vac01cdrecr/800:latest 858855954940.dkr.ecr.us-east-1.amazonaws.com/vac01cdrecr/800:$IMAGE_TAG   
   post_build:
     commands:
-      - echo Build completed on date
+      - echo Build completed on $(date)
+      - echo "Scanning the image vulnerability"
+      - trivy --no-progress --exit-code 1 --severity HIGH,CRITICAL $REPOSITORY_URI:$IMAGE_TAG
       - echo Pushing the Docker images...
-     # - docker push 858855954940.dkr.ecr.us-east-1.amazonaws.com/vac01cdrecr/800:latest
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
       - echo Writing image definitions file...
