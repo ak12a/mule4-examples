@@ -44,8 +44,8 @@ phases:
   post_build:
     commands:
       - echo Build completed on $(date)
-      - echo "Scanning the image vulnerability"
-      - trivy image --no-progress --exit-code 1 --severity HIGH,CRITICAL $REPOSITORY_URI:$IMAGE_TAG
+      # - echo "Scanning the image vulnerability"
+      # - trivy image --no-progress --exit-code 1 --severity HIGH,CRITICAL $REPOSITORY_URI:$IMAGE_TAG
       - echo Pushing the Docker images...
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
