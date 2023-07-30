@@ -1,0 +1,83 @@
+version: 0.2
+env:
+  secrets-manager:
+    LOGIN: local/sonar:sonartoken
+    HOST: local/sonar:HOST
+    Organization: local/sonar:Organization
+    Project: local/sonar:Project
+    
+phases:
+  install:
+    runtime-versions:
+      java: corretto8
+  pre_build:
+    commands:
+#       - echo " Installing Trivy to scan the docker image vulnerability" 
+#       - apt-get install wget apt-transport-https gnupg
+#       - wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | apt-key add -
+#       - echo deb https://aquasecurity.github.io/trivy-repo/deb bionic main | tee -a /etc/apt/sources.list.d/trivy.list
+#       - apt-get update
+#       - apt-get install -y trivy
+
+      - echo "Pre build phase ..."
+      - apt-get update
+      - apt-get install -y jq
+      - wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.7.0.2747-linux.zip
+      - echo "Current path is >>>"
+      - sh $pwd
+      - unzip ./sonar-scanner-cli-4.7.0.2747-linux.zip
+      - ls $pwd
+      - export PATH=$PATH:./sonar-scanner-4.7.0.2747-linux/bin/
+    
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      - echo $AWS_DEFAULT_REGION
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPOSITORY
+      - echo $REPOSITORY_URI
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - echo $COMMIT_HASH
+      - echo $CODEBUILD_BUILD_NUMBER
+      - IMAGE_TAG=${CODEBUILD_BUILD_NUMBER:=latest}
+      - java -version 
+      - mvn -version 
+      - pwd
+      - ls -l 
+  build:
+    commands:
+      - echo "Sonar Scan running  ..."
+      - sonar-scanner -Dsonar.login=$LOGIN -Dsonar.host.url=$HOST -Dsonar.projectKey=$Project -Dsonar.organization=$Organization
+      - sleep 5
+      - curl https://sonarcloud.io/api/qualitygates/project_status?projectKey=$Project >result.json
+      - cat result.json
+      - if [ $(jq -r '.projectStatus.status' result.json) = ERROR ] ; then $CODEBUILD_BUILD_SUCCEEDING -eq 0 ;fi
+      - echo "Sonar scan completed"
+      - echo Build started on $(date)
+      - cd $PROJECT_DIR
+      - echo Start Maven install
+      - echo $PWD
+      - ls -l 
+      - mvn install
+      - echo Start Maven build
+      - mvn clean package
+      - echo Building the Docker image...
+      - echo $REPOSITORY_URI
+      - ls -ltr 
+      - docker build -t $REPOSITORY_URI:latest .
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+  post_build:
+    commands:
+      - echo Build completed on $(date)
+      # - echo "Scanning the image vulnerability"
+      # - trivy image --no-progress --exit-code 1 --severity HIGH,CRITICAL $REPOSITORY_URI:$IMAGE_TAG
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo Writing image definitions file...
+      - printf '[{"name":"%s","imageUri":"%s"}]' $SERVICE_NAME $REPOSITORY_URI:$IMAGE_TAG > $CODEBUILD_SRC_DIR/imagedefinitions.json
+      - cat $CODEBUILD_SRC_DIR/imagedefinitions.json
+cache:
+  paths:
+    - '/root/.m2/*/'
+artifacts:
+    files: imagedefinitions.json
