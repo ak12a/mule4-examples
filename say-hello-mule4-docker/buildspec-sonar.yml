@@ -9,7 +9,7 @@ env:
 phases:
   install:
     runtime-versions:
-      java: corretto8
+      java: corretto17
   pre_build:
     commands:
 #       - echo " Installing Trivy to scan the docker image vulnerability" 
